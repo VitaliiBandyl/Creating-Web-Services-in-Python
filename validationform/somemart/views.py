@@ -1,5 +1,7 @@
+import base64
 import json
 
+from django.contrib.auth import authenticate
 from django.http import HttpResponse, JsonResponse
 from django.views import View
 
@@ -34,15 +36,23 @@ class AddItemView(View):
     """View для создания товара."""
 
     def post(self, request):
-        try:
-            document = json.loads(request.body)
-            schema = ItemSchema(strict=True)
-            item = schema.load(document).data
-            item.save()
-        except (json.JSONDecodeError, ValidationError, AssertionError):
-            return HttpResponse(status=400)
-        data = {'id': item.pk}
-        return JsonResponse(data, status=201)
+        coded_str = request.headers['authorization'].split()[1]
+        decoded_str = base64.b64decode(coded_str).decode('utf-8')
+        username, password = decoded_str.split(':')
+        user = authenticate(username=username, password=password)
+        if user is not None:
+            if user.is_staff:
+                try:
+                    document = json.loads(request.body)
+                    schema = ItemSchema(strict=True)
+                    item = schema.load(document).data
+                    item.save()
+                except (json.JSONDecodeError, ValidationError, AssertionError):
+                    return HttpResponse(status=400)
+                data = {'id': item.pk}
+                return JsonResponse(data, status=201)
+            return JsonResponse({}, status=403)
+        return JsonResponse({}, status=401)
 
 
 class PostReviewView(View):
